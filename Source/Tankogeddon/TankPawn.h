@@ -2,12 +2,18 @@
 
 #pragma once
 
+#include "ProjectilePool.h"
+
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
 #include "TankPawn.generated.h"
 
+
+
 class UStaticMeshComponent;
 class ACannon;
+
+
 
 UCLASS()
 class TANKOGEDDON_API ATankPawn : public APawn
@@ -20,16 +26,17 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	void MoveBase(float Value);
-
 	void RotationBase(float Value);
 
-	void Fire();
+	void RocketFire();
+	void MashinGunFire();
+	void LaserFire();
 
-	void FireSpecial();
-
+	void ChangeMainCannon();
 	void ReloadAmmo();
 
-	void SetupCannon(TSubclassOf<ACannon> newCannonClass);
+	void SetupCannon(TSubclassOf<ACannon> newRocketCannonClass, ERocketType RocketType = ERocketType::NonType, int32 ammoCount = 0);
+	void AddAmmo(int32 ammoCount);
 
 protected:
 	virtual void BeginPlay() override;
@@ -51,36 +58,55 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	class UCameraComponent* Camera;
 
-	// gun
+	// guns
 	UPROPERTY()
-	ACannon* Cannon;
+	ACannon* RocketCannon;
+
+	UPROPERTY()
+	ACannon* MachinGunCannon;
+
+	UPROPERTY()
+	ACannon* LaserCannon;
+
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cannon")
-	TSubclassOf<ACannon> CannonClass;
+	TSubclassOf<ACannon> CannonClassMain;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cannon")
+	TSubclassOf<ACannon> CannonClassSecond;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cannon")
 	class UArrowComponent* CannonSetupPoint;
 
+	ERocketType SecondRocketType = ERocketType::NonType;
+
 	// props
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	float MoveSpeed = 100.0f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	float RotationSpeed = 100.0f;
 
 	// interpolation
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "InterpolationKey")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "InterpolationKey")
 	float BaseMoveInterpolationKey = 0.125f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "InterpolationKey")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "InterpolationKey")
 	float BaseRotationInterpolationKey = 0.125f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "InterpolationKey")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "InterpolationKey")
 	float TurretRotationInterpolationKey = 0.125f;
 
 	// controller
 	UPROPERTY()
 	class ATankPlayerController* TankController;
+
+	// ProjectPool
+	UPROPERTY()
+	AProjectilePool* ProjectilePool;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ProjectPool")
+	TSubclassOf<AProjectilePool> AProjectilePoolClass;
 
 	float moveBaseAxisValue = 0.0f;
 	float rotationBaseAxisValue = 0.0f;
@@ -89,4 +115,5 @@ private:
 	void MoveAndRotationBase(float DeltaTime);
 
 	void RotationTurrel(float DeltaTime);
+
 };

@@ -2,12 +2,17 @@
 
 #pragma once
 
+#include "ProjectilePool.h"
+
 #include "CoreMinimal.h"
 #include "GameStruct.h"
 #include "GameFramework/Actor.h"
 #include "Cannon.generated.h"
 
+
+
 class UArrowComponent;
+
 
 UCLASS()
 class TANKOGEDDON_API ACannon : public AActor
@@ -18,14 +23,23 @@ public:
 	ACannon();
 
 	void Fire();
-
-	void FireSpecial();
-
+	void AddAmmo(int32 AmmoCount);
 	void ReloadAmmo();
+	void AutoShyting();
+
+	int32 GetAllAmmo() { return CurrentCountAmmo + CountAmmo; }
+
+	void SetProjectPool(AProjectilePool* Pool);
+	void SetRocketType(ERocketType NewRocketType);
+	ERocketType GetRocketType();
+
+private:
 
 	bool IsReadyToFire();
 
-	void AutoShyting();
+	void FireProjectileShut();
+	void FireTraceShut();
+	void FireMashinGun();
 
 protected:
 	UPROPERTY(VisibleDefaultsOnly, BlueprintReadWrite, Category = "Components")
@@ -41,22 +55,43 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Fire params")
 	float FireRange = 1000; // дистанция стрельбы
 
+	//UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Fire params")
+	//float FireDamage = 1; // количество наносимых повреждений.
+
+	// тип и класс снаряда
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Fire params")
-	float FireDamage = 1; // количество наносимых повреждений.
+	ECannonType Type = ECannonType::FireRocket; //тип пушки
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Fire params")
-	ECannonType Type = ECannonType::FireProjectile; //тип пушки.
+	ERocketType RocketType = ERocketType::NonType; //тип ракет
+
+
+	// снаряд
+	UPROPERTY()
+	class AProjectile* Projectile; 
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Fire params")
-	int Ammo = 10; // количество снарядов
+	TSubclassOf<class AProjectile> ProjectileClass; 
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Auto Shuting")
+
+	// Ammo
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Fire params/Ammo")
+	int32 MaxCurrentAmmo = 5; // количество снарядов
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Fire params/Ammo")
+	int32 CurrentCountAmmo = 0; // количество снарядов
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Fire params/Ammo")
+	int32 CountAmmo = 0; // общее количество снарядов
+
+	// auto shuting
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Auto Shuting")
 	int AutoShutCount = 3; // количество снарядов
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Auto Shuting")
-	float AutoShutTme = 0.1f; // количество снарядов
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Auto Shuting")
+	float AutoShutTme = 0.02f; // время повторного выстрела
 
-
+private:
 	FTimerHandle ReloadCannonTimerHandle; // структура, использующаяся для работы с таймерами перезарядки оружия.
 
 	FTimerHandle ReloadAmmoTimerHandle; // структура, использующаяся для работы с таймером перезарядки патрон.
@@ -73,4 +108,6 @@ protected:
 	virtual void BeginPlay() override;
 
 	void Reload();
+
+	AProjectilePool* ProjectilePool;
 };

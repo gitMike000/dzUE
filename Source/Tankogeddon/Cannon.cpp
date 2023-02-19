@@ -1,10 +1,12 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Cannon.h"
+#include "Projectile.h"
 #include "Components/ArrowComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "TimerManager.h"
 #include "Engine/Engine.h"
+#include "DrawDebugHelpers.h"
 
 ACannon::ACannon()
 {
@@ -18,7 +20,9 @@ ACannon::ACannon()
 
 	ProjectileSpawnPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("Spawnpoint"));
 	ProjectileSpawnPoint->SetupAttachment(Mesh);
+
 }
+
 
 void ACannon::Fire()
 {
@@ -26,25 +30,35 @@ void ACannon::Fire()
 	{
 		return;
 	}
-	
+
 	switch (Type)
 	{
-	case ECannonType::FireProjectile:
-		
+	case ECannonType::FireRocket:
+
 		// AutomaticShooting
 		if (!isAutoShyting)
 		{
-			Ammo--;
+			if (CurrentCountAmmo == 0)
+			{
+				ReloadAmmo();
+				return;
+			}
+
+			CurrentCountAmmo--;
 
 			AutoShyting();
 		}
-
 		break;
 
-	case ECannonType::FireTrace:
+	case ECannonType::FireLaser:
+
 		GEngine->AddOnScreenDebugMessage(10, 1, FColor::Green, "Fire - trace");
-		break;
+		FireTraceShut();
 
+		break;
+	case ECannonType::FireMachineGun:
+		FireMashinGun();
+		break;
 	default:
 		return;
 		break;
@@ -54,6 +68,11 @@ void ACannon::Fire()
 
 	// управление таймером через глобальный объект TimerManager
 	GetWorld()->GetTimerManager().SetTimer(ReloadCannonTimerHandle, this, &ACannon::Reload, 1 / FireRate, false);
+}
+
+void ACannon::AddAmmo(int32 AmmoCount)
+{
+	CountAmmo += AmmoCount;
 }
 
 void ACannon::AutoShyting()
@@ -69,12 +88,15 @@ void ACannon::AutoShyting()
 		}
 
 		// выстрел
-		const FString DebugMessage = FString::Printf(TEXT("AUTO FIRE:\nAutoShutCount:  %d\nAmmo:   %d   count!"), AutoShutCount, Ammo);
+		const FString DebugMessage = FString::Printf(TEXT("AUTO FIRE:\nAutoShutCount:  %d\nAmmo:   %d   count!"), AutoShutCount, CurrentCountAmmo);
 		GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Orange, DebugMessage);
+
+		FireProjectileShut();
+
 		AutoShutCount--;
 
 		// повтор
-		GetWorld()->GetTimerManager().SetTimer(AutomaticShootingTimerHandle, this, &ACannon::AutoShyting, AutoShutTme, false, true);
+		GetWorld()->GetTimerManager().SetTimer(AutomaticShootingTimerHandle, this, &ACannon::AutoShyting, AutoShutTme, true);
 	}
 	else
 	{
@@ -97,49 +119,94 @@ void ACannon::AutoShyting()
 	}
 }
 
-void ACannon::FireSpecial()
+void ACannon::SetProjectPool(AProjectilePool* Pool)
 {
-	if (!IsReadyToFire())
+	if (Pool)
 	{
-		return;
+		ProjectilePool = Pool;
+	}
+}
+
+void ACannon::SetRocketType(ERocketType NewRocketType)
+{
+	RocketType = NewRocketType;
+}
+
+ERocketType ACannon::GetRocketType()
+{
+	return RocketType;
+}
+
+
+
+void ACannon::FireProjectileShut()
+{
+	AProjectile* NewProjectile;
+
+	if (ProjectilePool)
+	{
+		NewProjectile = ProjectilePool->Get(ProjectileClass, RocketType);
+		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, "DebugMessage: create from pool");
+		if (NewProjectile)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, "DebugMessage: create from pool OK");
+			NewProjectile->SetActorLocation(ProjectileSpawnPoint->GetComponentLocation());
+			NewProjectile->SetActorRotation(ProjectileSpawnPoint->GetComponentRotation());
+		}
+	}
+	else
+	{
+		 NewProjectile = GetWorld()->SpawnActor<AProjectile>(ProjectileClass,
+			ProjectileSpawnPoint->GetComponentLocation(),
+			ProjectileSpawnPoint->GetComponentRotation());
+
+		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, "DebugMessage: create from spawn");
 	}
 
-	// swith ругается на пеедачу управления поэтому пришлось вынести 
-	int32 Key = -1;
-	float TimeToDisplay = 1.0f;
-	FColor DisplayColor = FColor::Blue;
-	const FString DebugMessage = FString::Printf(TEXT("Fire - projectile,   Ammo:   %d   count!"), Ammo);
-
-	switch (Type)
+	if (NewProjectile)
 	{
-	case ECannonType::FireProjectile:
-
-		Ammo--;
-
-		GEngine->AddOnScreenDebugMessage(Key , TimeToDisplay, DisplayColor , DebugMessage);
-
-		break;
-
-	case ECannonType::FireTrace:
-		GEngine->AddOnScreenDebugMessage(10, 1, FColor::Green, "Fire - trace");
-		break;
-
-	default:
-		return;
-		break;
+		NewProjectile->SetTimeLive(FireRange);
+		NewProjectile->Start();
 	}
+}
 
-	ReadyToFire = false;
+void ACannon::FireTraceShut()
+{
+	FHitResult hitResult;
 
-	
+	FCollisionQueryParams traceParams = FCollisionQueryParams(FName(TEXT("FireTrace")), true, this);
+	traceParams.AddIgnoredActor(this);
+	traceParams.bTraceComplex = true;
+	traceParams.bReturnPhysicalMaterial = false;
 
-	// управление таймером через глобальный объект TimerManager
-	GetWorld()->GetTimerManager().SetTimer(ReloadCannonTimerHandle, this, &ACannon::Reload, 1 / FireRate, false);
+	FVector start = ProjectileSpawnPoint->GetComponentLocation();
+	FVector end = ProjectileSpawnPoint->GetForwardVector() * FireRange + start;
+
+	if (GetWorld()->LineTraceSingleByChannel(hitResult, start, end, ECollisionChannel::ECC_Visibility, traceParams))
+	{
+		DrawDebugLine(GetWorld(), start, hitResult.Location, FColor::Red, false, 50.0f, 0, 5);
+
+		if (hitResult.GetActor())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Actor %s. "),  *hitResult.GetActor()->GetName());
+
+			hitResult.GetActor()->Destroy();
+		}
+	}
+	else
+	{
+		DrawDebugLine(GetWorld(), start, end, FColor::Yellow, false, 50.0f, 0, 5);
+	}
+}
+
+void ACannon::FireMashinGun()
+{
+
 }
 
 void ACannon::ReloadAmmo()
 {
-	if (Ammo == 10)
+	if (CurrentCountAmmo == MaxCurrentAmmo /* || CurrentCountAmmo  CountAmmo */)
 	{
 		isReloadWeapon = false;
 
@@ -159,30 +226,35 @@ void ACannon::ReloadAmmo()
 
 		return;
 	}
-	else
+	else if (CountAmmo > 0 && CurrentCountAmmo < MaxCurrentAmmo)
 	{
-		isReloadWeapon = true;
-
 		// если идет перезарядка пушки то останавливаем
 		if (GetWorld()->GetTimerManager().IsTimerActive(ReloadCannonTimerHandle))
 		{
 			GetWorld()->GetTimerManager().ClearTimer(ReloadCannonTimerHandle);
 		}
 
-		Ammo++;
+		CountAmmo--;
+		CurrentCountAmmo++;
 
-		const FString DebugMessage = FString::Printf(TEXT("Reloading Ammo:   %d   count!"), Ammo);
+		const FString DebugMessage = FString::Printf(TEXT("Reloading Ammo:   %d   count!"), CurrentCountAmmo);
 		GEngine->AddOnScreenDebugMessage(15, 2.0f, FColor::Yellow, DebugMessage);
 
 		GetWorld()->GetTimerManager().SetTimer(ReloadAmmoTimerHandle, this, &ACannon::ReloadAmmo, 0.3f, false, true);
 
+		isReloadWeapon = true;
 	}
-
+	else
+	{
+		isReloadWeapon = false;
+		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow, "No ammo!");
+	}
+	
 }
 
 bool ACannon::IsReadyToFire()
 {
-	if (Ammo == 0)
+	if (CurrentCountAmmo == 0)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red, "Reload your weapon!!!  R!");
 	}
@@ -202,7 +274,7 @@ bool ACannon::IsReadyToFire()
 		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, "Auto Shuting! Wait!");
 	}
 		
-	return ReadyToFire  && Ammo > 0 && !isReloadWeapon && !isAutoShyting;
+	return ReadyToFire  && CurrentCountAmmo > 0 && !isReloadWeapon && !isAutoShyting;
 }
 
 void ACannon::Reload()
@@ -215,5 +287,7 @@ void ACannon::BeginPlay()
 	Super::BeginPlay();
 
 	Reload();
+
+
 }
 

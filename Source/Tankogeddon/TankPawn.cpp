@@ -3,6 +3,8 @@
 #include "TankPawn.h"
 
 #include "TankPlayerController.h"
+
+//#include "Projectile.h"
 #include "Cannon.h"
 
 #include "Components/StaticMeshComponent.h"
@@ -61,49 +63,91 @@ void ATankPawn::RotationBase(float Value)
 	rotationBaseAxisValue = Value;
 }
 
-void ATankPawn::Fire()
+void ATankPawn::RocketFire()
 {
-	if (Cannon)
+	if (RocketCannon)
 	{
-		Cannon->Fire();
+		RocketCannon->Fire();
 	}
 }
 
-void ATankPawn::FireSpecial()
+void ATankPawn::MashinGunFire()
 {
-	if (Cannon)
+	if (MachinGunCannon)
 	{
-		Cannon->FireSpecial();
+		MachinGunCannon->Fire();
+	}
+}
+
+void ATankPawn::LaserFire()
+{
+	if (LaserCannon)
+	{
+		LaserCannon->Fire();
+	}
+}
+
+void ATankPawn::ChangeMainCannon()
+{
+	if (CannonClassSecond)
+	{
+		SetupCannon(CannonClassSecond, SecondRocketType, RocketCannon->GetAllAmmo());
 	}
 }
 
 void  ATankPawn::ReloadAmmo()
 {
-	if (Cannon)
+	if (RocketCannon)
 	{
-		Cannon->ReloadAmmo();
+		RocketCannon->ReloadAmmo();
 	}
 }
 
-void ATankPawn::SetupCannon(TSubclassOf<ACannon> newCannonClass)
+void ATankPawn::SetupCannon(TSubclassOf<ACannon> newRocketCannonClass, ERocketType NewRocketType, int32 ammoCount)
 {
-	if (!newCannonClass)
+	if (!newRocketCannonClass)
 	{
 		return;
 	}
 
-	if (Cannon)
+	if (CannonClassMain)
 	{
-		Cannon->Destroy();
+		CannonClassSecond = CannonClassMain;
+		SecondRocketType = RocketCannon->GetRocketType();
+	}
+
+	CannonClassMain = newRocketCannonClass;
+
+	if (RocketCannon)
+	{
+		RocketCannon->Destroy();
 	}
 
 	FActorSpawnParameters spawnParams;
 	spawnParams.Instigator = this;
 	spawnParams.Owner = this;
 
-	Cannon = GetWorld()->SpawnActor<ACannon>(newCannonClass, spawnParams);
+	RocketCannon = GetWorld()->SpawnActor<ACannon>(CannonClassMain, spawnParams);
 
-	Cannon->AttachToComponent(CannonSetupPoint, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	RocketCannon->AttachToComponent(CannonSetupPoint, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+
+	RocketCannon->SetProjectPool(ProjectilePool);
+
+	RocketCannon->SetRocketType(NewRocketType);
+		
+	if (ammoCount > 0)
+	{
+		AddAmmo(ammoCount);
+	}
+}
+
+void ATankPawn::AddAmmo(int32 AmmoCount)
+{
+	if (RocketCannon)
+	{
+		RocketCannon->AddAmmo(AmmoCount);
+		RocketCannon->ReloadAmmo();
+	}
 }
 
 void ATankPawn::BeginPlay()
@@ -112,7 +156,9 @@ void ATankPawn::BeginPlay()
 
 	TankController = Cast<ATankPlayerController>(GetController());
 
-	SetupCannon(CannonClass);
+	ProjectilePool  = GetWorld()->SpawnActor<AProjectilePool>(AProjectilePoolClass);
+
+	SetupCannon(CannonClassMain, ERocketType::NonType, 1);
 }
 
 void ATankPawn::MoveAndRotationBase(float DeltaTime)
@@ -121,12 +167,6 @@ void ATankPawn::MoveAndRotationBase(float DeltaTime)
 	FVector ForwardVector = GetActorForwardVector();
 	FVector ChangePosition = CurrentLocation + ForwardVector * MoveSpeed * moveBaseAxisValue * DeltaTime;
 	FVector NewPosition = FMath::Lerp(ChangePosition, CurrentLocation, BaseMoveInterpolationKey);
-
-	//UE_LOG(LogTemp, Warning, TEXT("MoveBase"));
-	//UE_LOG(LogTemp, Warning, TEXT("ChangePosition is: %s"), *ChangePosition.ToString());
-	//UE_LOG(LogTemp, Warning, TEXT("NewPosition    is: %s"), *NewPosition.ToString());
-	//FVector DeltaVector = ChangePosition - NewPosition;
-	//UE_LOG(LogTemp, Warning, TEXT("DeltaVector    is: %s"), *DeltaVector.ToString());
 
 	FRotator CurrentRotation = GetActorRotation();
 	FRotator ChangeRotation = CurrentRotation;
@@ -150,6 +190,6 @@ void ATankPawn::RotationTurrel(float DeltaTime)
 		TurretMesh->SetWorldRotation(NewRotation);
 
 		FVector turretPos = TurretMesh->GetComponentLocation();
-		DrawDebugLine(GetWorld(), turretPos, mousePos, FColor::Green, false, 0.1f, 0, 5);
+		//DrawDebugLine(GetWorld(), turretPos, mousePos, FColor::Green, false, 0.1f, 0, 5);
 	}
 }
